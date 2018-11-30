@@ -1,0 +1,55 @@
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#
+#        Script que envia datos al EmonPi mediante solicitud HTTP GET los datos se envian en formato JSON
+#
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+:global    ip          "192.168.0.40";                                                  # Dirección IP del EmonPi 
+:global    apikey  "c098d7fc84b0708560253f4d42a04f70";          # API key
+:global    node    "Mikrotik";                                                           # Nombre del nodo
+
+:global    json  "{";                                                                         # Datos a ser enviados en formato JSON
+
+# Array con los nombres de Queue Tree  sin _UP y _DW 
+:global   qname  { 
+                            "KOKI";
+                            "JATG";
+                             "G1";
+                            "Lap01_KOKI";              
+                            "Cel01_KOKI";
+                            "Tab01_JATG";
+                            "Lap02_JATG";
+                            "Lap01_JATG";
+                            "Cel02_JATG";
+                            "Cel01_JATG";
+                            "Terma";
+                            "Tab01_MA";
+                            "NAS";
+                            "Invitados";
+                            "EmonPi";
+                            "Cel01_MA";}
+
+{
+:local val;
+:local len [:len $qname];                                                                                                      # Cantidad de colas a ser consultadas an ambas direcciones UP y DOWN
+:foreach v in=$qname  do={
+                                          :set $len ($len-1);
+                                          :set $val [/queue tree get "$v_UP" bytes];                                 # Cantidad de bytes de subida de la queue
+                                          :set $val  ($val/1048576) ;                                                          # Convierte a MB
+                                          :set $json ($json.("TOT_$v_UP:$val,"));                                     # TOT_xxx_UP
+                                          :set $val [/queue tree get "$v_DW" bytes];                                # Cantidad de bytes de bajada de la queue
+                                          :set $val  ($val/1048576);                                                           # Convierte a MB
+                                          :set $json ($json.("TOT_$v_DW:$val,"));                                    # TOT_xxx_DW
+                                          :set $val [/queue tree get "$v_UP" rate];                                    # Velocidad  de subida de la queue
+                                          :set $val  ($val/1024) ;                                                                 # Convierte a Kbps
+                                          :set $json ($json.("RATE_$v_UP:$val,"));                                    # RATE_xxx_UP
+                                          :set $val [/queue tree get "$v_DW" rate];                                    # Velocidad  de subida de la queue
+                                          :set $val  ($val/1024) ;                                                                 # Convierte a Kbps
+                                          :set $json ($json.("RATE_$v_DW:$val"));                                    # RATE_xxx_DW
+                                          :if ($len>0) do={set $json ($json.",")} else={set $json ($json."}")}
+                                        }
+}
+
+# Envio de solicitud HTTP utilizando el metodo GET
+/tool fetch url="http://$ip/emoncms/input/post.json?node=$node&json=$json&apikey=$apikey";
+
